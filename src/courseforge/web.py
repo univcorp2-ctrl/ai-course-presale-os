@@ -20,10 +20,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={
-                "offer": offer,
-                "checkout_url": runtime.stripe_payment_link_url,
-            },
+            context={"offer": offer, "checkout_url": runtime.stripe_payment_link_url},
         )
 
     @app.get("/legal", response_class=HTMLResponse)
