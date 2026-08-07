@@ -3,18 +3,27 @@ name: Release approved presale
 on:
   workflow_dispatch:
     inputs:
+      artifact_run_id:
+        description: Run ID of a successful Daily content draft workflow
+        required: true
+        type: string
       release_id:
-        description: Approved release ID
+        description: Release ID contained in that artifact
+        required: true
+        type: string
+      reviewer:
+        description: Human reviewer name recorded in the manifest
         required: true
         type: string
       channels:
-        description: Comma-separated channels (stripe,shopify)
+        description: Comma-separated official API channels (stripe,shopify)
         required: true
         default: stripe
         type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: courseforge-live-release
@@ -23,13 +32,20 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
+      GH_TOKEN: ${{ github.token }}
+      ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+      RELEASE_ID: ${{ inputs.release_id }}
+      REVIEWER: ${{ inputs.reviewer }}
+      CHANNELS: ${{ inputs.channels }}
       PUBLISH_MODE: live
       APPROVED_RELEASE_ID: ${{ inputs.release_id }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      CHECKOUT_SUCCESS_URL: ${{ vars.CHECKOUT_SUCCESS_URL }}
       SHOPIFY_STORE_DOMAIN: ${{ vars.SHOPIFY_STORE_DOMAIN }}
       SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+      SHOPIFY_API_VERSION: ${{ vars.SHOPIFY_API_VERSION || '2026-07' }}
       SHOPIFY_PUBLICATION_ID: ${{ vars.SHOPIFY_PUBLICATION_ID }}
       LEGAL_SELLER_NAME: ${{ secrets.LEGAL_SELLER_NAME }}
       LEGAL_REPRESENTATIVE: ${{ secrets.LEGAL_REPRESENTATIVE }}
@@ -47,11 +63,36 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e .
-      - name: Restore approved release artifact
+      - name: Validate inputs
         run: |
-          test -d "artifacts/releases/${{ inputs.release_id }}" || {
-            echo "Approved release artifact is not present in this checkout." >&2
-            echo "Store approved artifacts in a durable release branch or artifact store before live use." >&2
+          [[ "$ARTIFACT_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_ID" =~ ^[a-z0-9][a-z0-9._-]{1,120}$ ]]
+          [[ -n "$REVIEWER" ]]
+          [[ "$CHANNELS" =~ ^(stripe|shopify)(,(stripe|shopify))*$ ]]
+      - name: Download immutable draft artifact
+        run: |
+          rm -rf downloaded artifacts
+          mkdir -p downloaded artifacts
+          gh run download "$ARTIFACT_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "courseforge-draft-$ARTIFACT_RUN_ID" \
+            --dir downloaded
+          if [ -d downloaded/releases ]; then
+            cp -R downloaded/releases artifacts/
+          elif [ -d downloaded/artifacts/releases ]; then
+            cp -R downloaded/artifacts/releases artifacts/
+          else
+            echo "Downloaded artifact does not contain releases/." >&2
             exit 1
-          }
-      - run: courseforge publish "${{ inputs.release_id }}" --channels "${{ inputs.channels }}" --live
+          fi
+          test -f "artifacts/releases/$RELEASE_ID/manifest.json"
+      - name: Record human approval
+        run: courseforge approve "$RELEASE_ID" --reviewer "$REVIEWER"
+      - name: Publish through official APIs
+        run: courseforge publish "$RELEASE_ID" --channels "$CHANNELS" --live
+      - uses: actions/upload-artifact@v4
+        with:
+          name: courseforge-published-${{ inputs.release_id }}
+          path: artifacts/releases/${{ inputs.release_id }}/
+          retention-days: 90
+          if-no-files-found: error
