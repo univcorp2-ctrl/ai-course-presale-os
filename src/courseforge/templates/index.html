@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ offer.title }}</title>
+  <style>
+    :root{--ink:#10212b;--muted:#5b6b73;--accent:#0f766e;--warm:#f59e0b;--paper:#fbfaf6;--card:#fff;--line:#dbe5e2}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,"Noto Sans JP",system-ui,sans-serif;line-height:1.75}
+    a{color:inherit}.wrap{width:min(1120px,calc(100% - 40px));margin:auto}.hero{padding:88px 0 64px;background:linear-gradient(135deg,#e4f6f2,#fff6dd)}
+    .eyebrow{display:inline-block;padding:7px 12px;border:1px solid #87bdb5;border-radius:99px;font-weight:700;color:var(--accent);background:#ffffffaa}
+    h1{font-size:clamp(2.35rem,7vw,5.6rem);line-height:1.05;letter-spacing:-.04em;max-width:950px;margin:22px 0}.lead{font-size:clamp(1.08rem,2.4vw,1.35rem);max-width:760px;color:var(--muted)}
+    .cta{display:inline-flex;margin-top:28px;background:var(--ink);color:white;text-decoration:none;padding:16px 24px;border-radius:12px;font-weight:800;box-shadow:0 8px 0 #8ecbc2}.cta.disabled{opacity:.55;pointer-events:none;box-shadow:none}
+    .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px}.meta div,.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}.meta strong{display:block;font-size:1.2rem}
+    section{padding:72px 0}h2{font-size:clamp(1.8rem,4vw,3.2rem);line-height:1.15;margin:0 0 28px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.module{display:grid;grid-template-columns:52px 1fr;gap:16px}.num{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;font-weight:900}.price{font-size:3rem;font-weight:900}.strike{text-decoration:line-through;color:var(--muted);font-size:1rem}.notice{border-left:5px solid var(--warm);padding:18px 22px;background:#fff7dd;border-radius:0 12px 12px 0}.footer{padding:40px 0;border-top:1px solid var(--line);color:var(--muted)}
+    @media(max-width:760px){.meta,.grid{grid-template-columns:1fr}.hero{padding-top:56px}}
+  </style>
+</head>
+<body>
+  <header class="hero"><div class="wrap">
+    <span class="eyebrow">予約販売・少人数実践講座</span>
+    <h1>{{ offer.title }}</h1>
+    <p class="lead">{{ offer.subtitle }}</p>
+    <a class="cta{% if not checkout_url %} disabled{% endif %}" href="/checkout">{{ offer.checkout_label }}</a>
+    {% if not checkout_url %}<p>現在は品質審査と販売者情報の設定中です。決済はまだ有効化されていません。</p>{% endif %}
+    <div class="meta">
+      <div><small>予約価格</small><strong>¥{{ "{:,}".format(offer.price_jpy) }}</strong><span class="strike">通常予定 ¥{{ "{:,}".format(offer.regular_price_jpy) }}</span></div>
+      <div><small>提供開始</small><strong>{{ offer.delivery_starts.date() }}</strong><span>{{ offer.delivery_format }}</span></div>
+      <div><small>定員</small><strong>{{ offer.capacity }}名</strong><span>支援品質を保つための運用上限</span></div>
+    </div>
+  </div></header>
+
+  <main>
+    <section><div class="wrap"><h2>受講後に「使える仕組み」が残る</h2><div class="grid">
+      {% for outcome in offer.outcomes %}<div class="card">{{ outcome }}</div>{% endfor %}
+    </div></div></section>
+
+    <section style="background:#eef7f5"><div class="wrap"><h2>カリキュラム</h2><div class="grid">
+      {% for module in offer.modules %}<article class="card module"><div class="num">{{ module.number }}</div><div><h3>{{ module.title }}</h3><p>{{ module.outcome }}</p><strong>成果物: {{ module.deliverable }}</strong></div></article>{% endfor %}
+    </div></div></section>
+
+    <section><div class="wrap"><h2>提供条件</h2><div class="grid">
+      <div class="card"><h3>形式</h3><p>{{ offer.delivery_format }}</p><h3>サポート</h3><p>{{ offer.support }}</p></div>
+      <div class="card"><h3>予約受付期間</h3><p>{{ offer.presale_opens }} 〜 {{ offer.presale_closes }}</p><h3>返金条件</h3><p>{{ offer.refund_policy }}</p></div>
+    </div><p class="notice">AIは草案作成と検査補助に利用します。出典照合、重複検査、複数モデル審査、人による承認を通過していない教材は公開しません。</p></div></section>
+  </main>
+  <footer class="footer"><div class="wrap"><a href="/legal">特定商取引法に基づく表示</a> · <span>CourseForge</span></div></footer>
+</body>
+</html>
