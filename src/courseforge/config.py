@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     publish_mode: Literal["draft", "live"] = "draft"
     approved_release_id: str = ""
     fulfillment_mode: Literal["draft", "live"] = "draft"
+    marketing_mode: Literal["draft", "live"] = "draft"
 
     state_db_path: Path = Path("var/courseforge.db")
     artifact_dir: Path = Path("artifacts")
@@ -66,6 +67,9 @@ class Settings(BaseSettings):
     from_email: str | None = None
     course_portal_url: str | None = None
     max_fulfillments_per_run: int = 50
+    marketing_landing_url: str | None = None
+    unsubscribe_base_url: str | None = None
+    max_marketing_emails_per_run: int = 100
 
     legal_seller_name: str | None = None
     legal_representative: str | None = None
