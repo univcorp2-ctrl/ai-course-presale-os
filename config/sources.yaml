@@ -1,0 +1,30 @@
+# Only summaries and metadata from allowed feeds are ingested. Full articles are not copied.
+local_markdown:
+  - content/seeds/product-principles.md
+  - docs/PRODUCT_BLUEPRINT.md
+
+allowed_domains:
+  - openai.com
+  - anthropic.com
+  - blog.google
+  - ai.google.dev
+  - developers.notion.com
+  - arxiv.org
+
+rss_defaults:
+  max_age_days: 21
+  max_items: 8
+
+rss:
+  - name: OpenAI News
+    url: https://openai.com/news/rss.xml
+    enabled: true
+  - name: Anthropic News
+    url: https://www.anthropic.com/news/rss.xml
+    enabled: true
+  - name: Google AI
+    url: https://blog.google/technology/ai/rss/
+    enabled: true
+  - name: arXiv cs.AI
+    url: https://export.arxiv.org/rss/cs.AI
+    enabled: true
