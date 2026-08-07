@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     automation_enabled: bool = False
     publish_mode: Literal["draft", "live"] = "draft"
     approved_release_id: str = ""
+    fulfillment_mode: Literal["draft", "live"] = "draft"
 
     state_db_path: Path = Path("var/courseforge.db")
     artifact_dir: Path = Path("artifacts")
@@ -54,11 +55,17 @@ class Settings(BaseSettings):
     stripe_secret_key: str | None = None
     stripe_payment_link_url: str | None = None
     stripe_webhook_secret: str | None = None
+    stripe_webhook_tolerance_seconds: int = 300
     checkout_success_url: str = "http://localhost:8000/thanks"
     shopify_store_domain: str | None = None
     shopify_admin_token: str | None = None
     shopify_api_version: str = "2026-07"
     shopify_publication_id: str | None = None
+
+    resend_api_key: str | None = None
+    from_email: str | None = None
+    course_portal_url: str | None = None
+    max_fulfillments_per_run: int = 50
 
     legal_seller_name: str | None = None
     legal_representative: str | None = None
@@ -110,9 +117,7 @@ def load_legal_profile(settings: Settings) -> dict[str, str]:
         "refund_policy": settings.legal_refund_policy,
         "additional_fees": settings.legal_additional_fees,
     }
-    return {
-        key: str(env_values[key] or file_values.get(key, "")).strip() for key in env_values
-    }
+    return {key: str(env_values[key] or file_values.get(key, "")).strip() for key in env_values}
 
 
 def legal_profile_complete(profile: dict[str, str]) -> bool:
