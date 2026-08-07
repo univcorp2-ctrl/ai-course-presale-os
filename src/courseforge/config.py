@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     notion_data_source_id: str | None = None
     notion_status_property: str = "Status"
     notion_allowed_statuses: str = "Approved,Reference"
+    notion_confidentiality_property: str = "Confidentiality"
+    notion_allowed_confidentialities: str = "Public"
+    notion_allowed_use_property: str = "Allowed Use"
+    notion_allowed_uses: str = "Summarize,Publish"
     notion_version: str = "2026-03-11"
 
     openai_api_key: str | None = None
@@ -69,20 +73,13 @@ class Settings(BaseSettings):
     def secret_for_env(self, name: str | None) -> str | None:
         if not name:
             return None
-        value = os.getenv(name)
-        if value:
-            return value
-        field_name = name.lower()
-        return getattr(self, field_name, None)
+        return os.getenv(name) or getattr(self, name.lower(), None)
 
     def value_for_env(self, name: str | None, default: str) -> str:
         if not name:
             return default
-        value = os.getenv(name)
-        if value:
-            return value
-        configured = getattr(self, name.lower(), None)
-        return str(configured or default)
+        value = os.getenv(name) or getattr(self, name.lower(), None)
+        return str(value if value is not None else default)
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -113,10 +110,9 @@ def load_legal_profile(settings: Settings) -> dict[str, str]:
         "refund_policy": settings.legal_refund_policy,
         "additional_fees": settings.legal_additional_fees,
     }
-    merged: dict[str, str] = {}
-    for key in env_values:
-        merged[key] = str(env_values[key] or file_values.get(key, "")).strip()
-    return merged
+    return {
+        key: str(env_values[key] or file_values.get(key, "")).strip() for key in env_values
+    }
 
 
 def legal_profile_complete(profile: dict[str, str]) -> bool:
