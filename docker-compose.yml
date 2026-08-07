@@ -10,8 +10,6 @@ services:
       - ./content:/app/content:ro
       - ./artifacts:/app/artifacts
       - ./var:/app/var
-    depends_on:
-      - ollama
 
   ollama:
     image: ollama/ollama:latest
