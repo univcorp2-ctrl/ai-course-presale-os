@@ -10,6 +10,7 @@ from courseforge.commerce import CommerceService
 from courseforge.config import Settings, legal_profile_complete, load_legal_profile, load_offer
 from courseforge.fulfillment import FulfillmentService
 from courseforge.llm import ModelPolicy, ProviderFactory
+from courseforge.marketing import MarketingService, SubscriberImporter
 from courseforge.pipeline import CourseForgePipeline
 from courseforge.state import StateStore
 
@@ -27,6 +28,7 @@ def doctor() -> None:
         "environment": settings.environment,
         "publish_mode": settings.publish_mode,
         "fulfillment_mode": settings.fulfillment_mode,
+        "marketing_mode": settings.marketing_mode,
         "automation_enabled": settings.automation_enabled,
         "notion_ready": bool(settings.notion_token and settings.notion_data_source_id),
         "providers": {
@@ -43,6 +45,12 @@ def doctor() -> None:
         "stripe_webhook_ready": bool(settings.stripe_webhook_secret),
         "fulfillment_ready": bool(
             settings.resend_api_key and settings.from_email and settings.course_portal_url
+        ),
+        "marketing_ready": bool(
+            settings.resend_api_key
+            and settings.from_email
+            and settings.marketing_landing_url
+            and settings.unsubscribe_base_url
         ),
         "shopify_ready": bool(
             settings.shopify_store_domain
@@ -117,6 +125,30 @@ def fulfill_pending(live: bool = typer.Option(False, "--live")) -> None:
     settings = Settings()
     state = StateStore(settings.state_db_path)
     result = FulfillmentService(settings, state).process_pending(live=live)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+
+@app.command("subscribers-import")
+def subscribers_import(csv_path: Path) -> None:
+    """明示的な同意記録を持つCSVだけを購読者台帳へ追加します。"""
+    result = SubscriberImporter(StateStore(Settings().state_db_path)).import_csv(csv_path)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@app.command()
+def campaign(
+    release_id: str,
+    campaign_id: str = typer.Option(..., "--campaign-id"),
+    live: bool = typer.Option(False, "--live"),
+) -> None:
+    """同意済み購読者への告知計画を表示し、--live時だけ送信します。"""
+    settings = Settings()
+    state = StateStore(settings.state_db_path)
+    result = MarketingService(settings, state).execute(
+        release_id=release_id,
+        campaign_id=campaign_id,
+        live=live,
+    )
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
