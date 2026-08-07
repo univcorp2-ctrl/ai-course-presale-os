@@ -4,6 +4,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from courseforge.models import ReleaseManifest
 
@@ -38,6 +39,21 @@ class StateStore:
                     release_id TEXT PRIMARY KEY,
                     manifest_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS processed_webhooks (
+                    event_id TEXT PRIMARY KEY,
+                    event_type TEXT NOT NULL,
+                    received_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS enrollments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    release_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL,
+                    sent_at TEXT,
+                    last_error TEXT,
+                    UNIQUE(email, release_id)
                 );
                 """
             )
@@ -86,3 +102,45 @@ class StateStore:
                 "SELECT manifest_json FROM releases WHERE release_id = ?", (release_id,)
             ).fetchone()
         return ReleaseManifest.model_validate(json.loads(row["manifest_json"])) if row else None
+
+    def record_paid_checkout(self, *, event_id: str, event_type: str, email: str, release_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as connection:
+            inserted = connection.execute(
+                "INSERT OR IGNORE INTO processed_webhooks (event_id, event_type, received_at) VALUES (?, ?, ?)",
+                (event_id, event_type, now),
+            )
+            if inserted.rowcount == 0:
+                return False
+            connection.execute(
+                """INSERT INTO enrollments (email, release_id, status, created_at)
+                VALUES (?, ?, 'pending', ?)
+                ON CONFLICT(email, release_id) DO NOTHING""",
+                (email.casefold().strip(), release_id, now),
+            )
+        return True
+
+    def list_pending_enrollments(self, limit: int) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id, email, release_id, status, created_at
+                FROM enrollments WHERE status IN ('pending', 'failed')
+                ORDER BY created_at ASC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_enrollment_sent(self, enrollment_id: int) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE enrollments SET status = 'sent', sent_at = ?, last_error = NULL
+                WHERE id = ?""",
+                (datetime.now(timezone.utc).isoformat(), enrollment_id),
+            )
+
+    def mark_enrollment_failed(self, enrollment_id: int, error: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE enrollments SET status = 'failed', last_error = ? WHERE id = ?",
+                (error[:1000], enrollment_id),
+            )
