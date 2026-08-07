@@ -1,0 +1,57 @@
+name: Release approved presale
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Approved release ID
+        required: true
+        type: string
+      channels:
+        description: Comma-separated channels (stripe,shopify)
+        required: true
+        default: stripe
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: courseforge-live-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUBLISH_MODE: live
+      APPROVED_RELEASE_ID: ${{ inputs.release_id }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      SHOPIFY_STORE_DOMAIN: ${{ vars.SHOPIFY_STORE_DOMAIN }}
+      SHOPIFY_ADMIN_TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+      SHOPIFY_PUBLICATION_ID: ${{ vars.SHOPIFY_PUBLICATION_ID }}
+      LEGAL_SELLER_NAME: ${{ secrets.LEGAL_SELLER_NAME }}
+      LEGAL_REPRESENTATIVE: ${{ secrets.LEGAL_REPRESENTATIVE }}
+      LEGAL_ADDRESS: ${{ secrets.LEGAL_ADDRESS }}
+      LEGAL_PHONE: ${{ secrets.LEGAL_PHONE }}
+      LEGAL_EMAIL: ${{ secrets.LEGAL_EMAIL }}
+      LEGAL_PAYMENT_TIMING: ${{ vars.LEGAL_PAYMENT_TIMING }}
+      LEGAL_DELIVERY_TIMING: ${{ vars.LEGAL_DELIVERY_TIMING }}
+      LEGAL_REFUND_POLICY: ${{ vars.LEGAL_REFUND_POLICY }}
+      LEGAL_ADDITIONAL_FEES: ${{ vars.LEGAL_ADDITIONAL_FEES }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Restore approved release artifact
+        run: |
+          test -d "artifacts/releases/${{ inputs.release_id }}" || {
+            echo "Approved release artifact is not present in this checkout." >&2
+            echo "Store approved artifacts in a durable release branch or artifact store before live use." >&2
+            exit 1
+          }
+      - run: courseforge publish "${{ inputs.release_id }}" --channels "${{ inputs.channels }}" --live
