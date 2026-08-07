@@ -29,8 +29,8 @@ providers:
     paid: true
     review_eligible: true
     daily_token_limit: 180000
-    input_cost_per_million: 0
-    output_cost_per_million: 0
+    input_cost_per_million: 0.75
+    output_cost_per_million: 4.50
     tasks: [triage, synthesis, fact_check, pedagogy, compliance, marketing]
 
   - id: codex-code-review
