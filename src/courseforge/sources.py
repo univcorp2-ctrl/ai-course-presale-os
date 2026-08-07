@@ -40,19 +40,14 @@ class NotionSource:
             "Notion-Version": settings.notion_version,
             "Content-Type": "application/json",
         }
-        self.rate_limiter = RateLimiter(3.0)
+        self.rate_limiter = RateLimiter(2.5)
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         delays = [1.0, 2.0, 4.0]
         with httpx.Client(timeout=30.0) as client:
             for attempt, delay in enumerate(delays, start=1):
                 self.rate_limiter.wait()
-                response = client.request(
-                    method,
-                    f"{self.base_url}{path}",
-                    headers=self.headers,
-                    **kwargs,
-                )
+                response = client.request(method, f"{self.base_url}{path}", headers=self.headers, **kwargs)
                 if response.status_code != 429:
                     response.raise_for_status()
                     return response
@@ -93,12 +88,10 @@ class NotionSource:
         if block.get("has_children") and depth < 2:
             cursor: str | None = None
             while True:
-                params = {"page_size": 100}
+                params: dict[str, Any] = {"page_size": 100}
                 if cursor:
                     params["start_cursor"] = cursor
-                response = self._request(
-                    "GET", f"/blocks/{block['id']}/children", params=params
-                ).json()
+                response = self._request("GET", f"/blocks/{block['id']}/children", params=params).json()
                 for child in response.get("results", []):
                     child_text = self._block_text(child, depth + 1)
                     if child_text:
@@ -112,12 +105,10 @@ class NotionSource:
         lines: list[str] = []
         cursor: str | None = None
         while True:
-            params = {"page_size": 100}
+            params: dict[str, Any] = {"page_size": 100}
             if cursor:
                 params["start_cursor"] = cursor
-            payload = self._request(
-                "GET", f"/blocks/{page_id}/children", params=params
-            ).json()
+            payload = self._request("GET", f"/blocks/{page_id}/children", params=params).json()
             for block in payload.get("results", []):
                 text = self._block_text(block)
                 if text:
@@ -127,12 +118,14 @@ class NotionSource:
             cursor = payload.get("next_cursor")
         return "\n\n".join(lines)
 
+    @staticmethod
+    def _csv_set(value: str) -> set[str]:
+        return {item.strip() for item in value.split(",") if item.strip()}
+
     def collect(self, limit: int = 50) -> list[SourceDocument]:
-        statuses = {
-            item.strip()
-            for item in self.settings.notion_allowed_statuses.split(",")
-            if item.strip()
-        }
+        statuses = self._csv_set(self.settings.notion_allowed_statuses)
+        confidentialities = self._csv_set(self.settings.notion_allowed_confidentialities)
+        allowed_uses = self._csv_set(self.settings.notion_allowed_uses)
         pages: list[dict[str, Any]] = []
         cursor: str | None = None
         while len(pages) < limit:
@@ -142,11 +135,7 @@ class NotionSource:
             }
             if cursor:
                 body["start_cursor"] = cursor
-            response = self._request(
-                "POST",
-                f"/data_sources/{self.settings.notion_data_source_id}/query",
-                json=body,
-            ).json()
+            response = self._request("POST", f"/data_sources/{self.settings.notion_data_source_id}/query", json=body).json()
             pages.extend(response.get("results", []))
             if not response.get("has_more"):
                 break
@@ -156,9 +145,18 @@ class NotionSource:
         for page in pages:
             properties = self._properties(page)
             status = properties.get(self.settings.notion_status_property, "")
+            confidentiality = properties.get(self.settings.notion_confidentiality_property, "")
+            allowed_use = properties.get(self.settings.notion_allowed_use_property, "")
             if statuses and status not in statuses:
                 continue
-            title = next((value for key, value in properties.items() if key.casefold() in {"title", "name", "名前", "タイトル"} and value), "Untitled")
+            if confidentialities and confidentiality not in confidentialities:
+                continue
+            if allowed_uses and allowed_use not in allowed_uses:
+                continue
+            title = next(
+                (value for key, value in properties.items() if key.casefold() in {"title", "name", "名前", "タイトル"} and value),
+                "Untitled",
+            )
             body = self._page_body(page["id"])
             if not body.strip():
                 continue
@@ -170,22 +168,19 @@ class NotionSource:
                     text=body,
                     url=page.get("url"),
                     published_at=page.get("last_edited_time"),
-                    metadata={"properties": properties, "status": status},
+                    metadata={
+                        "properties": properties,
+                        "status": status,
+                        "confidentiality": confidentiality,
+                        "allowed_use": allowed_use,
+                    },
                 )
             )
         return documents
 
 
 class RSSSource:
-    def __init__(
-        self,
-        *,
-        name: str,
-        url: str,
-        allowed_domains: set[str],
-        max_age_days: int,
-        max_items: int,
-    ) -> None:
+    def __init__(self, *, name: str, url: str, allowed_domains: set[str], max_age_days: int, max_items: int) -> None:
         self.name = name
         self.url = url
         self.allowed_domains = allowed_domains
@@ -198,28 +193,23 @@ class RSSSource:
         return re.sub(r"\s+", " ", html.unescape(no_tags)).strip()
 
     def collect(self) -> list[SourceDocument]:
-        feed = feedparser.parse(self.url)
+        response = httpx.get(self.url, timeout=30.0, follow_redirects=True)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
         documents: list[SourceDocument] = []
         for entry in feed.entries[: self.max_items]:
             link = str(entry.get("link", ""))
             domain = urlparse(link).hostname or ""
-            if self.allowed_domains and not any(
-                domain == allowed or domain.endswith(f".{allowed}")
-                for allowed in self.allowed_domains
-            ):
+            if self.allowed_domains and not any(domain == allowed or domain.endswith(f".{allowed}") for allowed in self.allowed_domains):
                 continue
             published_at = None
             struct_time = entry.get("published_parsed") or entry.get("updated_parsed")
             if struct_time:
-                published_at = datetime.fromtimestamp(
-                    calendar.timegm(struct_time), tz=timezone.utc
-                )
+                published_at = datetime.fromtimestamp(calendar.timegm(struct_time), tz=timezone.utc)
                 if published_at < cutoff:
                     continue
-            summary = self._clean_html(
-                str(entry.get("summary") or entry.get("description") or "")
-            )
+            summary = self._clean_html(str(entry.get("summary") or entry.get("description") or ""))
             if not summary:
                 continue
             digest = hashlib.sha256(link.encode("utf-8")).hexdigest()[:16]
@@ -247,13 +237,12 @@ class LocalMarkdownSource:
         for path in self.paths:
             if not path.exists() or not path.is_file():
                 continue
-            text = path.read_text(encoding="utf-8")
             documents.append(
                 SourceDocument(
                     id=f"local:{path.as_posix()}",
                     source_type="local",
                     title=path.stem.replace("-", " "),
-                    text=text,
+                    text=path.read_text(encoding="utf-8"),
                     metadata={"path": path.as_posix()},
                 )
             )
@@ -265,25 +254,21 @@ def deduplicate_documents(documents: list[SourceDocument]) -> list[SourceDocumen
     result: list[SourceDocument] = []
     for document in documents:
         fingerprint = document.fingerprint()
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        result.append(document)
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            result.append(document)
     return result
 
 
 def collect_sources(settings: Settings) -> tuple[list[SourceDocument], list[str]]:
     config = load_yaml(settings.source_config_path)
     warnings: list[str] = []
-    documents: list[SourceDocument] = []
-
-    local_paths = [Path(item) for item in config.get("local_markdown", [])]
-    documents.extend(LocalMarkdownSource(local_paths).collect())
+    documents = LocalMarkdownSource([Path(item) for item in config.get("local_markdown", [])]).collect()
 
     if settings.notion_token and settings.notion_data_source_id:
         try:
             documents.extend(NotionSource(settings).collect())
-        except Exception as exc:  # Source isolation is intentional.
+        except Exception as exc:
             warnings.append(f"Notion source failed: {type(exc).__name__}: {exc}")
     else:
         warnings.append("Notion source skipped: credentials or data source ID not configured")
@@ -300,10 +285,9 @@ def collect_sources(settings: Settings) -> tuple[list[SourceDocument], list[str]
                     url=feed["url"],
                     allowed_domains=allowed_domains,
                     max_age_days=int(feed.get("max_age_days", rss_defaults.get("max_age_days", 21))),
-                    max_items=int(feed.get("max_items", rss_defaults.get("max_items", 10))),
+                    max_items=int(feed.get("max_items", rss_defaults.get("max_items", 8))),
                 ).collect()
             )
         except Exception as exc:
             warnings.append(f"RSS source {feed.get('name', 'unknown')} failed: {type(exc).__name__}: {exc}")
-
     return deduplicate_documents(documents), warnings
