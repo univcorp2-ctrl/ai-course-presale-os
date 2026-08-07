@@ -7,12 +7,7 @@ import typer
 import uvicorn
 
 from courseforge.commerce import CommerceService
-from courseforge.config import (
-    Settings,
-    legal_profile_complete,
-    load_legal_profile,
-    load_offer,
-)
+from courseforge.config import Settings, legal_profile_complete, load_legal_profile, load_offer
 from courseforge.llm import ModelPolicy, ProviderFactory
 from courseforge.pipeline import CourseForgePipeline
 
@@ -24,9 +19,7 @@ def doctor() -> None:
     """秘密値を表示せず、運用準備状況を確認します。"""
     settings = Settings()
     policy = ModelPolicy.from_path(settings.model_config_path)
-    providers = {
-        spec.id: ProviderFactory.create(spec, settings) for spec in policy.providers
-    }
+    providers = {spec.id: ProviderFactory.create(spec, settings) for spec in policy.providers}
     legal = load_legal_profile(settings)
     report = {
         "environment": settings.environment,
@@ -85,7 +78,7 @@ def publish(
     channels: str = typer.Option("stripe", "--channels"),
     live: bool = typer.Option(False, "--live"),
 ) -> None:
-    """販売チャネルの実行計画を表示し、--live時だけ外部へ反映します。"""
+    """販売計画を表示し、--live時だけ公式APIへ反映します。"""
     settings = Settings()
     pipeline = CourseForgePipeline(settings)
     manifest = pipeline.load_release(release_id)
@@ -103,23 +96,16 @@ def publish(
     release_dir = settings.artifact_dir / "releases" / release_id
     release_dir.mkdir(parents=True, exist_ok=True)
     (release_dir / "commerce-result.json").write_text(
-        json.dumps(results, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8",
+        json.dumps(results, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
     if live:
-        (release_dir / "manifest.json").write_text(
-            manifest.model_dump_json(indent=2), encoding="utf-8"
-        )
+        (release_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
         pipeline.state.save_manifest(manifest)
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
 
 
 @app.command()
-def serve(
-    host: str = "127.0.0.1",
-    port: int = 8000,
-    reload: bool = False,
-) -> None:
+def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> None:
     """予約販売ランディングページを起動します。"""
     uvicorn.run("courseforge.web:app", host=host, port=port, reload=reload)
 
