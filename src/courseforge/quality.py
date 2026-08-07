@@ -31,14 +31,9 @@ def _shingles(text: str, size: int = 24) -> set[str]:
     return {normalized[index : index + size] for index in range(len(normalized) - size + 1)}
 
 
-def deterministic_review(
-    draft: ContentDraft,
-    sources: list[SourceDocument],
-    offer: Offer,
-) -> list[ReviewFinding]:
+def deterministic_review(draft: ContentDraft, sources: list[SourceDocument], offer: Offer) -> list[ReviewFinding]:
     findings: list[ReviewFinding] = []
     body = draft.body_markdown
-
     for code, pattern in FORBIDDEN_CLAIMS.items():
         match = pattern.search(body)
         if match:
@@ -52,8 +47,7 @@ def deterministic_review(
                 )
             )
 
-    required_presale_terms = ["予約販売", "提供開始", "返金"]
-    missing = [term for term in required_presale_terms if term not in body]
+    missing = [term for term in ["予約販売", "提供開始", "返金"] if term not in body]
     if missing:
         findings.append(
             ReviewFinding(
@@ -129,14 +123,14 @@ def _extract_json(text: str) -> dict[str, Any]:
             return {}
 
 
-def parse_agent_review(
-    *,
-    provider_id: str,
-    model: str,
-    task: TaskKind,
-    text: str,
-    review_eligible: bool,
-) -> AgentReview:
+def _score(value: object) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def parse_agent_review(*, provider_id: str, model: str, task: TaskKind, text: str, review_eligible: bool) -> AgentReview:
     payload = _extract_json(text)
     if not payload:
         return AgentReview(
@@ -146,14 +140,12 @@ def parse_agent_review(
             approved=False,
             score=0,
             review_eligible=review_eligible,
-            findings=[
-                ReviewFinding(
-                    code="unparseable_review",
-                    severity=Severity.HIGH,
-                    message="レビュー結果が指定JSON形式ではありません。",
-                    suggestion="同じ内容を構造化して再レビューしてください。",
-                )
-            ],
+            findings=[ReviewFinding(
+                code="unparseable_review",
+                severity=Severity.HIGH,
+                message="レビュー結果が指定JSON形式ではありません。",
+                suggestion="同じ内容を構造化して再レビューしてください。",
+            )],
             raw_excerpt=text[:1000],
         )
     findings: list[ReviewFinding] = []
@@ -161,19 +153,13 @@ def parse_agent_review(
         try:
             findings.append(ReviewFinding.model_validate(item))
         except Exception:
-            findings.append(
-                ReviewFinding(
-                    code="invalid_review_finding",
-                    severity=Severity.MEDIUM,
-                    message=str(item)[:300],
-                )
-            )
+            findings.append(ReviewFinding(code="invalid_review_finding", severity=Severity.MEDIUM, message=str(item)[:300]))
     return AgentReview(
         provider_id=provider_id,
         model=model,
         task=task,
         approved=bool(payload.get("approved", False)),
-        score=max(0, min(100, int(payload.get("score", 0)))),
+        score=_score(payload.get("score", 0)),
         findings=findings,
         review_eligible=review_eligible,
         raw_excerpt=text[:1000],
@@ -226,26 +212,11 @@ class MultiAgentReviewer:
 
 class ReviewGate:
     @staticmethod
-    def evaluate(
-        *,
-        agent_reviews: list[AgentReview],
-        deterministic_findings: list[ReviewFinding],
-        min_agents: int,
-        for_live: bool,
-        legal_complete: bool,
-    ) -> GateResult:
+    def evaluate(*, agent_reviews: list[AgentReview], deterministic_findings: list[ReviewFinding], min_agents: int, for_live: bool, legal_complete: bool) -> GateResult:
         eligible_reviews = [review for review in agent_reviews if review.review_eligible]
         provider_count = len({review.provider_id for review in eligible_reviews})
-        blockers = [
-            finding
-            for finding in deterministic_findings
-            if finding.severity in {Severity.HIGH, Severity.CRITICAL}
-        ]
-        warnings = [
-            finding
-            for finding in deterministic_findings
-            if finding.severity not in {Severity.HIGH, Severity.CRITICAL}
-        ]
+        blockers = [finding for finding in deterministic_findings if finding.severity in {Severity.HIGH, Severity.CRITICAL}]
+        warnings = [finding for finding in deterministic_findings if finding.severity not in {Severity.HIGH, Severity.CRITICAL}]
         if provider_count < min_agents:
             blockers.append(
                 ReviewFinding(
@@ -255,16 +226,8 @@ class ReviewGate:
                 )
             )
         for review in eligible_reviews:
-            blockers.extend(
-                finding
-                for finding in review.findings
-                if finding.severity in {Severity.HIGH, Severity.CRITICAL}
-            )
-            warnings.extend(
-                finding
-                for finding in review.findings
-                if finding.severity not in {Severity.HIGH, Severity.CRITICAL}
-            )
+            blockers.extend(finding for finding in review.findings if finding.severity in {Severity.HIGH, Severity.CRITICAL})
+            warnings.extend(finding for finding in review.findings if finding.severity not in {Severity.HIGH, Severity.CRITICAL})
             if not review.approved:
                 blockers.append(
                     ReviewFinding(
