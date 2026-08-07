@@ -18,16 +18,8 @@ def _write_json(path: Path, value: object) -> None:
     _write(path, json.dumps(value, ensure_ascii=False, indent=2, default=str))
 
 
-def export_platform_packages(
-    *,
-    draft: ContentDraft,
-    offer: Offer,
-    manifest: ReleaseManifest,
-    release_dir: Path,
-) -> None:
-    source_lines = "\n".join(
-        f"- [{label}] {url}" for label, url in draft.source_labels.items() if url
-    )
+def export_platform_packages(*, draft: ContentDraft, offer: Offer, manifest: ReleaseManifest, release_dir: Path) -> None:
+    source_lines = "\n".join(f"- [{label}] {url}" for label, url in draft.source_labels.items() if url)
     direct = f"""# {offer.title}
 
 {offer.subtitle}
