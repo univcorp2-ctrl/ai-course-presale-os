@@ -4,21 +4,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from courseforge.config import (
-    Settings,
-    legal_profile_complete,
-    load_legal_profile,
-    load_offer,
-)
+from courseforge.config import Settings, legal_profile_complete, load_legal_profile, load_offer
 from courseforge.exporters import export_platform_packages
 from courseforge.llm import CompletionRequest, ModelRouter, RouterError, build_router
-from courseforge.models import (
-    ContentDraft,
-    Offer,
-    ReleaseManifest,
-    SourceDocument,
-    TaskKind,
-)
+from courseforge.models import ContentDraft, Offer, ReleaseManifest, SourceDocument, TaskKind
 from courseforge.quality import MultiAgentReviewer, ReviewGate, deterministic_review
 from courseforge.sources import collect_sources
 from courseforge.state import StateStore
@@ -41,21 +30,14 @@ class CourseForgePipeline:
         labels: dict[str, str] = {}
         for index, document in enumerate(documents[:12], start=1):
             label = f"S{index}"
-            labels[label] = document.url or document.metadata.get("path", document.id)
-            excerpt = document.text[:1800].strip()
+            labels[label] = str(document.url or document.metadata.get("path", document.id))
             chunks.append(
                 f"[{label}] {document.title}\nsource_type={document.source_type}\n"
-                f"url={document.url or 'local'}\n{excerpt}"
+                f"url={document.url or 'local'}\n{document.text[:1800].strip()}"
             )
         return "\n\n---\n\n".join(chunks), labels
 
-    def _generate(
-        self,
-        *,
-        offer: Offer,
-        documents: list[SourceDocument],
-        release_id: str,
-    ) -> ContentDraft:
+    def _generate(self, *, offer: Offer, documents: list[SourceDocument], release_id: str) -> ContentDraft:
         source_context, labels = self._source_context(documents)
         trace: list[dict[str, object]] = []
         try:
@@ -152,9 +134,7 @@ AIは情報整理と草案作成に利用します。公開前に出典照合、
         release_id = self._release_id(offer.slug)
         draft = self._generate(offer=offer, documents=documents, release_id=release_id)
         deterministic = deterministic_review(draft, documents, offer)
-        agent_reviews = MultiAgentReviewer(
-            self.router, self.settings.min_review_agents
-        ).review(draft)
+        agent_reviews = MultiAgentReviewer(self.router, self.settings.min_review_agents).review(draft)
         legal_profile = load_legal_profile(self.settings)
         legal_complete = legal_profile_complete(legal_profile)
         gate = ReviewGate.evaluate(
@@ -173,23 +153,12 @@ AIは情報整理と草案作成に利用します。公開前に出典照合、
             deterministic_findings=deterministic,
             agent_reviews=agent_reviews,
             source_count=len(documents),
-            warnings=source_warnings
-            + [f"gate: {item.code}: {item.message}" for item in gate.blockers],
+            warnings=source_warnings + [f"gate: {item.code}: {item.message}" for item in gate.blockers],
         )
         release_dir = self.settings.artifact_dir / "releases" / release_id
-        export_platform_packages(
-            draft=draft,
-            offer=offer,
-            manifest=manifest,
-            release_dir=release_dir,
-        )
+        export_platform_packages(draft=draft, offer=offer, manifest=manifest, release_dir=release_dir)
         (release_dir / "sources.json").write_text(
-            json.dumps(
-                [document.model_dump(mode="json") for document in documents],
-                ensure_ascii=False,
-                indent=2,
-                default=str,
-            ),
+            json.dumps([document.model_dump(mode="json") for document in documents], ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
         self.state.save_manifest(manifest)
