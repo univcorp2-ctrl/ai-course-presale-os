@@ -42,45 +42,20 @@ class StateStore:
                 """
             )
 
-    def record_usage(
-        self,
-        *,
-        provider_id: str,
-        model: str,
-        task: str,
-        input_tokens: int,
-        output_tokens: int,
-        estimated_cost_usd: float,
-        paid: bool,
-    ) -> None:
+    def record_usage(self, *, provider_id: str, model: str, task: str, input_tokens: int, output_tokens: int, estimated_cost_usd: float, paid: bool) -> None:
         with self._connect() as connection:
             connection.execute(
-                """
-                INSERT INTO usage_events (
-                    provider_id, model, task, input_tokens, output_tokens,
-                    estimated_cost_usd, paid, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    provider_id,
-                    model,
-                    task,
-                    input_tokens,
-                    output_tokens,
-                    estimated_cost_usd,
-                    1 if paid else 0,
-                    datetime.now(timezone.utc).isoformat(),
-                ),
+                """INSERT INTO usage_events
+                (provider_id, model, task, input_tokens, output_tokens, estimated_cost_usd, paid, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (provider_id, model, task, input_tokens, output_tokens, estimated_cost_usd, 1 if paid else 0, datetime.now(timezone.utc).isoformat()),
             )
 
     def paid_tokens_since(self, since: datetime) -> int:
         with self._connect() as connection:
             row = connection.execute(
-                """
-                SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
-                FROM usage_events
-                WHERE paid = 1 AND created_at >= ?
-                """,
+                """SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+                FROM usage_events WHERE paid = 1 AND created_at >= ?""",
                 (since.isoformat(),),
             ).fetchone()
         return int(row["total"] if row else 0)
@@ -88,11 +63,8 @@ class StateStore:
     def provider_tokens_since(self, provider_id: str, since: datetime) -> int:
         with self._connect() as connection:
             row = connection.execute(
-                """
-                SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
-                FROM usage_events
-                WHERE provider_id = ? AND created_at >= ?
-                """,
+                """SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+                FROM usage_events WHERE provider_id = ? AND created_at >= ?""",
                 (provider_id, since.isoformat()),
             ).fetchone()
         return int(row["total"] if row else 0)
@@ -101,22 +73,16 @@ class StateStore:
         payload = manifest.model_dump_json()
         with self._connect() as connection:
             connection.execute(
-                """
-                INSERT INTO releases (release_id, manifest_json, updated_at)
+                """INSERT INTO releases (release_id, manifest_json, updated_at)
                 VALUES (?, ?, ?)
                 ON CONFLICT(release_id) DO UPDATE SET
-                    manifest_json = excluded.manifest_json,
-                    updated_at = excluded.updated_at
-                """,
+                manifest_json = excluded.manifest_json, updated_at = excluded.updated_at""",
                 (manifest.release_id, payload, datetime.now(timezone.utc).isoformat()),
             )
 
     def load_manifest(self, release_id: str) -> ReleaseManifest | None:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT manifest_json FROM releases WHERE release_id = ?",
-                (release_id,),
+                "SELECT manifest_json FROM releases WHERE release_id = ?", (release_id,)
             ).fetchone()
-        if not row:
-            return None
-        return ReleaseManifest.model_validate(json.loads(row["manifest_json"]))
+        return ReleaseManifest.model_validate(json.loads(row["manifest_json"])) if row else None
