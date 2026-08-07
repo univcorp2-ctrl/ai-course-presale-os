@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, time, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel, Field
@@ -78,13 +78,7 @@ class BaseProvider:
     def complete(self, request: CompletionRequest) -> CompletionResult:
         raise NotImplementedError
 
-    def _result(
-        self,
-        request: CompletionRequest,
-        text: str,
-        input_tokens: int | None = None,
-        output_tokens: int | None = None,
-    ) -> CompletionResult:
+    def _result(self, request: CompletionRequest, text: str, input_tokens: int | None = None, output_tokens: int | None = None) -> CompletionResult:
         input_count = input_tokens or estimate_tokens(request.system_prompt + request.user_prompt)
         output_count = output_tokens or estimate_tokens(text)
         cost = (
@@ -104,24 +98,17 @@ class BaseProvider:
 
 class HeuristicProvider(BaseProvider):
     def complete(self, request: CompletionRequest) -> CompletionResult:
-        if request.task in {
-            TaskKind.FACT_CHECK,
-            TaskKind.PEDAGOGY,
-            TaskKind.COMPLIANCE,
-            TaskKind.CODE_EXAMPLE,
-        }:
+        if request.task in {TaskKind.FACT_CHECK, TaskKind.PEDAGOGY, TaskKind.COMPLIANCE, TaskKind.CODE_EXAMPLE}:
             text = json.dumps(
                 {
                     "approved": False,
                     "score": 45,
-                    "findings": [
-                        {
-                            "code": "human_or_external_review_required",
-                            "severity": "high",
-                            "message": "No review-eligible external or local model was available.",
-                            "suggestion": "Configure at least two independent review providers.",
-                        }
-                    ],
+                    "findings": [{
+                        "code": "external_review_required",
+                        "severity": "high",
+                        "message": "独立したレビュー対象モデルを利用できませんでした。",
+                        "suggestion": "最低2つの独立プロバイダーを設定してください。",
+                    }],
                 },
                 ensure_ascii=False,
             )
@@ -153,19 +140,18 @@ class OpenAIProvider(BaseProvider):
         return bool(self.api_key)
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
-        payload = {
-            "model": self.model,
-            "input": [
-                {"role": "system", "content": request.system_prompt},
-                {"role": "user", "content": request.user_prompt},
-            ],
-            "max_output_tokens": request.max_output_tokens,
-        }
         response = httpx.post(
             f"{self.base_url}/responses",
             headers={"Authorization": f"Bearer {self.api_key}"},
-            json=payload,
-            timeout=120.0,
+            json={
+                "model": self.model,
+                "input": [
+                    {"role": "system", "content": request.system_prompt},
+                    {"role": "user", "content": request.user_prompt},
+                ],
+                "max_output_tokens": request.max_output_tokens,
+            },
+            timeout=180.0,
         )
         response.raise_for_status()
         data = response.json()
@@ -211,7 +197,7 @@ class AnthropicProvider(BaseProvider):
                 "messages": [{"role": "user", "content": request.user_prompt}],
                 "max_tokens": request.max_output_tokens,
             },
-            timeout=120.0,
+            timeout=180.0,
         )
         response.raise_for_status()
         data = response.json()
@@ -230,13 +216,7 @@ class AnthropicProvider(BaseProvider):
 
 
 class OllamaProvider(BaseProvider):
-    def __init__(
-        self,
-        spec: ProviderSpec,
-        model: str,
-        base_url: str,
-        enabled: bool,
-    ) -> None:
+    def __init__(self, spec: ProviderSpec, model: str, base_url: str, enabled: bool) -> None:
         super().__init__(spec, model)
         self.base_url = base_url.rstrip("/")
         self.enabled = enabled
@@ -256,14 +236,13 @@ class OllamaProvider(BaseProvider):
                     {"role": "user", "content": request.user_prompt},
                 ],
             },
-            timeout=180.0,
+            timeout=240.0,
         )
         response.raise_for_status()
         data = response.json()
-        text = str(data.get("message", {}).get("content", ""))
         return self._result(
             request,
-            text,
+            str(data.get("message", {}).get("content", "")),
             int(data.get("prompt_eval_count", 0)) or None,
             int(data.get("eval_count", 0)) or None,
         )
@@ -295,7 +274,10 @@ class AntigravityProvider(BaseProvider):
         )
         response.raise_for_status()
         data = response.json()
-        return self._result(request, str(data.get("output_text", "")))
+        text = str(data.get("output_text", ""))
+        if not text:
+            raise RuntimeError("Antigravity interaction did not return output_text")
+        return self._result(request, text)
 
 
 class ProviderFactory:
@@ -307,8 +289,7 @@ class ProviderFactory:
         if spec.kind == "ollama":
             enabled = settings.ollama_enabled
             if spec.enabled_env:
-                env_value = settings.value_for_env(spec.enabled_env, str(enabled)).casefold()
-                enabled = env_value in {"1", "true", "yes", "on"}
+                enabled = settings.value_for_env(spec.enabled_env, str(enabled)).casefold() in {"1", "true", "yes", "on"}
             return OllamaProvider(spec, model, settings.ollama_base_url, enabled)
         api_key = settings.secret_for_env(spec.api_key_env)
         if spec.kind == "openai":
@@ -321,14 +302,7 @@ class ProviderFactory:
 
 
 class ModelRouter:
-    def __init__(
-        self,
-        *,
-        policy: ModelPolicy,
-        providers: dict[str, BaseProvider],
-        state: StateStore,
-        settings: Settings,
-    ) -> None:
+    def __init__(self, *, policy: ModelPolicy, providers: dict[str, BaseProvider], state: StateStore, settings: Settings) -> None:
         self.policy = policy
         self.providers = providers
         self.state = state
@@ -360,16 +334,9 @@ class ModelRouter:
             and provider_used + estimated_tokens <= spec.daily_token_limit
         )
 
-    def complete(
-        self,
-        request: CompletionRequest,
-        *,
-        exclude: set[str] | None = None,
-        review_only: bool = False,
-    ) -> CompletionResult:
+    def complete(self, request: CompletionRequest, *, exclude: set[str] | None = None, review_only: bool = False) -> CompletionResult:
         excluded = exclude or set()
-        estimated_tokens = estimate_tokens(request.system_prompt + request.user_prompt)
-        estimated_tokens += request.max_output_tokens
+        estimated_tokens = estimate_tokens(request.system_prompt + request.user_prompt) + request.max_output_tokens
         errors: list[str] = []
         for provider_id in self.policy.route_for(request.task):
             if provider_id in excluded:
