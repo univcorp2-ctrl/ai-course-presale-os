@@ -55,6 +55,25 @@ class StateStore:
                     last_error TEXT,
                     UNIQUE(email, release_id)
                 );
+                CREATE TABLE IF NOT EXISTS subscribers (
+                    email TEXT PRIMARY KEY,
+                    consent_at TEXT NOT NULL,
+                    consent_source TEXT NOT NULL,
+                    unsubscribe_token TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL,
+                    unsubscribed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS campaign_deliveries (
+                    campaign_id TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    release_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    message_id TEXT,
+                    last_error TEXT,
+                    created_at TEXT NOT NULL,
+                    sent_at TEXT,
+                    PRIMARY KEY(campaign_id, email)
+                );
                 """
             )
 
@@ -144,3 +163,62 @@ class StateStore:
                 "UPDATE enrollments SET status = 'failed', last_error = ? WHERE id = ?",
                 (error[:1000], enrollment_id),
             )
+
+    def add_subscriber(self, *, email: str, consent_at: str, consent_source: str, unsubscribe_token: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as connection:
+            inserted = connection.execute(
+                """INSERT OR IGNORE INTO subscribers
+                (email, consent_at, consent_source, unsubscribe_token, created_at)
+                VALUES (?, ?, ?, ?, ?)""",
+                (email.casefold().strip(), consent_at, consent_source.strip(), unsubscribe_token, now),
+            )
+        return inserted.rowcount > 0
+
+    def list_campaign_recipients(self, campaign_id: str, limit: int) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT s.email, s.unsubscribe_token
+                FROM subscribers AS s
+                LEFT JOIN campaign_deliveries AS d
+                  ON d.campaign_id = ? AND d.email = s.email
+                WHERE s.unsubscribed_at IS NULL
+                  AND (d.status IS NULL OR d.status != 'sent')
+                ORDER BY s.created_at ASC
+                LIMIT ?""",
+                (campaign_id, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_campaign_result(self, *, campaign_id: str, email: str, release_id: str, status: str, message_id: str | None = None, error: str | None = None) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO campaign_deliveries
+                (campaign_id, email, release_id, status, message_id, last_error, created_at, sent_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(campaign_id, email) DO UPDATE SET
+                  status = excluded.status,
+                  message_id = excluded.message_id,
+                  last_error = excluded.last_error,
+                  sent_at = excluded.sent_at""",
+                (
+                    campaign_id,
+                    email.casefold().strip(),
+                    release_id,
+                    status,
+                    message_id,
+                    (error or "")[:1000] or None,
+                    now,
+                    now if status == "sent" else None,
+                ),
+            )
+
+    def unsubscribe(self, token: str) -> bool:
+        with self._connect() as connection:
+            updated = connection.execute(
+                """UPDATE subscribers SET unsubscribed_at = ?
+                WHERE unsubscribe_token = ? AND unsubscribed_at IS NULL""",
+                (datetime.now(timezone.utc).isoformat(), token),
+            )
+        return updated.rowcount > 0
