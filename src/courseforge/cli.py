@@ -8,8 +8,10 @@ import uvicorn
 
 from courseforge.commerce import CommerceService
 from courseforge.config import Settings, legal_profile_complete, load_legal_profile, load_offer
+from courseforge.fulfillment import FulfillmentService
 from courseforge.llm import ModelPolicy, ProviderFactory
 from courseforge.pipeline import CourseForgePipeline
+from courseforge.state import StateStore
 
 app = typer.Typer(no_args_is_help=True, help="AI講座の生成・審査・予約販売を運用します。")
 
@@ -24,6 +26,7 @@ def doctor() -> None:
     report = {
         "environment": settings.environment,
         "publish_mode": settings.publish_mode,
+        "fulfillment_mode": settings.fulfillment_mode,
         "automation_enabled": settings.automation_enabled,
         "notion_ready": bool(settings.notion_token and settings.notion_data_source_id),
         "providers": {
@@ -37,6 +40,10 @@ def doctor() -> None:
         },
         "legal_profile_complete": legal_profile_complete(legal),
         "stripe_ready": bool(settings.stripe_secret_key),
+        "stripe_webhook_ready": bool(settings.stripe_webhook_secret),
+        "fulfillment_ready": bool(
+            settings.resend_api_key and settings.from_email and settings.course_portal_url
+        ),
         "shopify_ready": bool(
             settings.shopify_store_domain
             and settings.shopify_admin_token
@@ -102,6 +109,15 @@ def publish(
         (release_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
         pipeline.state.save_manifest(manifest)
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
+
+
+@app.command("fulfill-pending")
+def fulfill_pending(live: bool = typer.Option(False, "--live")) -> None:
+    """購入済み受講者への案内計画を表示し、--live時だけ送信します。"""
+    settings = Settings()
+    state = StateStore(settings.state_db_path)
+    result = FulfillmentService(settings, state).process_pending(live=live)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 
 @app.command()
