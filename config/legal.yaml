@@ -1,0 +1,11 @@
+# Live publishing is blocked while any value is empty or contains TODO/DRAFT/要入力.
+# Prefer encrypted environment variables or GitHub Secrets for personal data.
+seller_name: "要入力"
+representative: "要入力"
+address: "要入力"
+phone: "要入力"
+email: "要入力"
+payment_timing: "要入力"
+delivery_timing: "要入力"
+refund_policy: "DRAFT: 法務確認後に確定"
+additional_fees: "要入力"
