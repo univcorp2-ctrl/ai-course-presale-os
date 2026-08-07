@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>特定商取引法に基づく表示</title><style>body{font-family:system-ui,sans-serif;line-height:1.7;color:#17232a;margin:0;background:#f7f7f4}main{max-width:840px;margin:48px auto;background:#fff;padding:36px;border-radius:18px}dt{font-weight:800;margin-top:20px}dd{margin:4px 0 0;padding-bottom:14px;border-bottom:1px solid #e4e8e6}.missing{color:#b42318;font-weight:800}</style></head>
+<body><main><h1>特定商取引法に基づく表示</h1><p>本ページは環境変数または安全な設定から生成されます。未設定項目がある状態ではライブ販売ゲートを通過できません。</p><dl>
+{% for key, label in [('seller_name','販売事業者'),('representative','運営責任者'),('address','所在地'),('phone','電話番号'),('email','連絡先メール'),('payment_timing','支払時期・方法'),('delivery_timing','提供時期'),('refund_policy','申込みの撤回・解除・返金'),('additional_fees','追加負担')] %}
+<dt>{{ label }}</dt><dd>{% if profile[key] %}{{ profile[key] }}{% else %}<span class="missing">未設定</span>{% endif %}</dd>
+{% endfor %}
+</dl><p><a href="/">講座ページへ戻る</a></p></main></body></html>
