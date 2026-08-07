@@ -1,0 +1,44 @@
+name: Daily content draft
+
+on:
+  schedule:
+    - cron: "30 0 * * 1-5" # 09:30 JST, weekdays
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: courseforge-daily-draft
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    if: ${{ vars.AUTOMATION_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AUTOMATION_ENABLED: "true"
+      PUBLISH_MODE: draft
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_DATA_SOURCE_ID: ${{ vars.NOTION_DATA_SOURCE_ID }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      MAX_PAID_CALLS_PER_RUN: ${{ vars.MAX_PAID_CALLS_PER_RUN || '4' }}
+      DAILY_PAID_TOKEN_BUDGET: ${{ vars.DAILY_PAID_TOKEN_BUDGET || '120000' }}
+      MONTHLY_PAID_TOKEN_BUDGET: ${{ vars.MONTHLY_PAID_TOKEN_BUDGET || '1500000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - run: courseforge run-daily
+      - uses: actions/upload-artifact@v4
+        with:
+          name: courseforge-draft-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: error
