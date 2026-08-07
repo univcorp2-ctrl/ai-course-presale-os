@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -61,12 +62,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 secret=runtime.stripe_webhook_secret,
                 tolerance_seconds=runtime.stripe_webhook_tolerance_seconds,
             )
-            event = parse_event(payload)
-            return accept_stripe_event(event, state)
+            return accept_stripe_event(parse_event(payload), state)
         except StripeSignatureError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except (ValueError, KeyError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/unsubscribe/{token}", response_class=HTMLResponse)
+    def unsubscribe_form(token: str) -> HTMLResponse:
+        safe_token = html.escape(token, quote=True)
+        return HTMLResponse(
+            "<main style='max-width:720px;margin:80px auto;font-family:sans-serif'>"
+            "<h1>メール配信の停止</h1>"
+            "<p>今後のマーケティングメールを停止します。購入に必要な取引メールは対象外です。</p>"
+            f"<form method='post' action='/unsubscribe/{safe_token}'>"
+            "<button type='submit'>配信を停止する</button></form></main>"
+        )
+
+    @app.post("/unsubscribe/{token}", response_class=HTMLResponse)
+    def unsubscribe(token: str) -> HTMLResponse:
+        state.unsubscribe(token)
+        return HTMLResponse(
+            "<main style='max-width:720px;margin:80px auto;font-family:sans-serif'>"
+            "<h1>配信停止を受け付けました</h1>"
+            "<p>今後のマーケティングメール配信対象から除外します。</p></main>"
+        )
 
     @app.get("/thanks", response_class=HTMLResponse)
     def thanks() -> HTMLResponse:
