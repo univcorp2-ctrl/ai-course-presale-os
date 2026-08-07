@@ -1,0 +1,76 @@
+providers:
+  - id: ollama-local
+    kind: ollama
+    default_model: qwen3:8b
+    model_env: OLLAMA_MODEL
+    enabled_env: OLLAMA_ENABLED
+    paid: false
+    review_eligible: true
+    daily_token_limit: 500000
+    tasks: [triage, synthesis, fact_check, pedagogy, compliance, marketing]
+
+  - id: claude-editor
+    kind: anthropic
+    default_model: claude-sonnet-4-6
+    model_env: CLAUDE_MODEL
+    api_key_env: ANTHROPIC_API_KEY
+    paid: true
+    review_eligible: true
+    daily_token_limit: 180000
+    input_cost_per_million: 0
+    output_cost_per_million: 0
+    tasks: [research, synthesis, fact_check, pedagogy, compliance, marketing, code_example]
+
+  - id: openai-general
+    kind: openai
+    default_model: gpt-5.4-mini
+    model_env: OPENAI_MODEL
+    api_key_env: OPENAI_API_KEY
+    paid: true
+    review_eligible: true
+    daily_token_limit: 180000
+    input_cost_per_million: 0
+    output_cost_per_million: 0
+    tasks: [triage, synthesis, fact_check, pedagogy, compliance, marketing]
+
+  - id: codex-code-review
+    kind: openai
+    default_model: gpt-5-codex
+    model_env: CODEX_MODEL
+    api_key_env: OPENAI_API_KEY
+    paid: true
+    review_eligible: true
+    daily_token_limit: 80000
+    input_cost_per_million: 0
+    output_cost_per_million: 0
+    tasks: [code_example]
+
+  - id: antigravity-research
+    kind: antigravity
+    default_model: antigravity-preview-05-2026
+    model_env: ANTIGRAVITY_MODEL
+    api_key_env: GEMINI_API_KEY
+    paid: true
+    review_eligible: true
+    daily_token_limit: 80000
+    input_cost_per_million: 0
+    output_cost_per_million: 0
+    tasks: [research, fact_check]
+
+  - id: safe-fallback
+    kind: heuristic
+    default_model: deterministic-fallback-v1
+    paid: false
+    review_eligible: false
+    daily_token_limit: 999999999
+    tasks: [triage, synthesis, fact_check, pedagogy, compliance, marketing, code_example]
+
+routes:
+  triage: [ollama-local, openai-general, safe-fallback]
+  research: [antigravity-research, claude-editor, openai-general]
+  synthesis: [claude-editor, openai-general, ollama-local, safe-fallback]
+  code_example: [codex-code-review, claude-editor, safe-fallback]
+  fact_check: [antigravity-research, openai-general, claude-editor, ollama-local, safe-fallback]
+  pedagogy: [claude-editor, openai-general, ollama-local, safe-fallback]
+  compliance: [openai-general, claude-editor, ollama-local, safe-fallback]
+  marketing: [claude-editor, openai-general, ollama-local, safe-fallback]
