@@ -1,0 +1,47 @@
+slug: ai-workflow-builder-bootcamp
+title: AI業務フロー構築 実践ブートキャンプ
+subtitle: プロンプト集で終わらせず、情報源・モデル選定・費用上限・品質レビュー・例外処理まで備えた業務自動化を6週間で設計します。
+audience: 中小企業の経営者、事業責任者、業務改善担当者、AI導入を任された非エンジニア
+promise: 自社の1業務について、測定可能で安全に止められるAIワークフローと運用台帳を完成させる
+outcomes:
+  - 自動化すべき業務と、してはいけない業務を数値で選別できる
+  - Notion・外部情報・社内資料の出典と利用条件を追跡できる
+  - Ollama、Claude、OpenAI/Codex、Antigravityを品質・費用・機密性で振り分けられる
+  - 複数エージェントの審査結果を公開可否へ変換できる
+  - 予約販売から教材更新、配信、改善指標まで一つの運用にまとめられる
+modules:
+  - number: 1
+    title: 売れる前に、解くべき課題を選ぶ
+    outcome: 顧客の痛み、頻度、支払意思、実装難易度を比較する
+    deliverable: 課題選定スコアカード
+  - number: 2
+    title: 情報源と権利を設計する
+    outcome: Notion・ニュース・一次資料の利用範囲と鮮度を管理する
+    deliverable: 情報源台帳と引用ルール
+  - number: 3
+    title: モデルルーティングと予算制御
+    outcome: ローカル・高性能・エージェント型モデルをタスク別に割り当てる
+    deliverable: モデル振り分け表と月次上限
+  - number: 4
+    title: コンテンツを教材へ変換する
+    outcome: 情報を手順、演習、ケース、テンプレートに再構成する
+    deliverable: 1モジュール分の完成教材
+  - number: 5
+    title: 複数エージェント品質ゲート
+    outcome: 事実、教育価値、コード、表示、重複を独立審査する
+    deliverable: 審査ルーブリックと承認記録
+  - number: 6
+    title: 予約販売と配信運用
+    outcome: 販売条件、決済、提供開始、更新通知、返金対応を一体化する
+    deliverable: 予約販売ページと運用手順書
+price_jpy: 29800
+regular_price_jpy: 49800
+currency: jpy
+capacity: 50
+presale_opens: 2026-09-01T09:00:00+09:00
+presale_closes: 2026-09-30T23:59:59+09:00
+delivery_starts: 2026-10-15T19:00:00+09:00
+delivery_format: 6週間・週1回の教材公開、演習テンプレート、隔週オンライン質疑、アーカイブ
+support: 受講期間中の質問フォームと隔週Q&A。個別の成果や収益は保証しません。
+refund_policy: DRAFT: 講座開始前は申請により全額返金。開始後の条件は販売者が法務確認のうえ確定する。
+checkout_label: 予約購入する
